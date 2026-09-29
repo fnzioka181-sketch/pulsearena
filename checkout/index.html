@@ -1,0 +1,70 @@
+<!-- aha-build-id: bmugle72i0d6pwizu -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout — PulseArena</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:"Source Sans 3",system-ui;background:#f6f3ee;color:#12202b}
+.wrap{max-width:520px;margin:0 auto;padding:40px 18px}
+h1{font-family:Fraunces,Georgia,serif}
+input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #dce4ea;margin:6px 0;box-sizing:border-box}
+.btn{width:100%;border:0;border-radius:999px;padding:14px;background:#e35d2a;color:#fff;font-weight:800;cursor:pointer}
+.card{background:#fff;border:1px solid #dce4ea;border-radius:16px;padding:18px}
+.note{font-size:14px;color:#5b6b76}
+.ok{color:#1b7a4a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p><a href="../pricing/">← Pricing</a></p>
+  <h1>Pay for your plan</h1>
+  <p class="note">Live customer records load from DummyJSON. Payments are <strong>sandbox</strong> — no real M-Pesa or card charge until you connect a Paystack/Stripe/M-Pesa business account. We never store card numbers.</p>
+  <div class="card">
+    <p id="sum">Loading plan…</p>
+    <label>School / trainer name</label>
+    <input id="name" placeholder="Northridge Computing">
+    <label>Email</label>
+    <input id="email" type="email" placeholder="you@school.ac.ke">
+    <label>M-Pesa phone (sandbox)</label>
+    <input id="phone" inputmode="tel" placeholder="2547…">
+    <label>Method</label>
+    <select id="method"><option>Mobile money (M-Pesa-ready sandbox)</option><option>Card (tokenized sandbox)</option></select>
+    <p id="err" style="color:#c43c2c"></p>
+    <button class="btn" id="pay">Confirm sandbox payment</button>
+    <p id="done" class="ok"></p>
+  </div>
+  <h3>Live directory (DummyJSON)</h3>
+  <div id="live" class="note">Connecting…</div>
+</div>
+<script src="../biz.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const plan = q.get("plan") || "starter";
+const yearly = q.get("yearly") === "1";
+const b = PulseBiz.load();
+const p = plan==="event" ? {name:"One-Time Event", amount:b.eventPrice} :
+  (()=>{ const x=b.plans.find(z=>z.id===plan)||b.plans[1]; return {name:x.name, amount: yearly?x.yearly:x.monthly}; })();
+document.getElementById("sum").textContent = p.name + " · KES " + p.amount.toLocaleString() + (yearly?" / year": plan==="event"?"":" / month");
+
+fetch("https://dummyjson.com/users?limit=6").then(r=>r.json()).then(d=>{
+  document.getElementById("live").innerHTML = (d.users||[]).map(u=>`${u.firstName} ${u.lastName} · ${u.email}`).join("<br>");
+}).catch(()=>{ document.getElementById("live").textContent = "Live directory unavailable — checkout still works locally."; });
+
+document.getElementById("pay").onclick = () => {
+  const name=document.getElementById("name").value.trim();
+  const email=document.getElementById("email").value.trim();
+  const phone=document.getElementById("phone").value.trim();
+  if(!name || !email.includes("@") || phone.length<9){ document.getElementById("err").textContent="Enter name, a valid email, and phone."; return; }
+  document.getElementById("err").textContent="";
+  const tx = PulseBiz.pay({ userId: email, amount: p.amount, plan: p.name, method: document.getElementById("method").value });
+  const orders = JSON.parse(localStorage.getItem("pa-orders")||"[]");
+  orders.unshift({ tx, name, email, phone, plan:p.name, amount:p.amount, currency:"KES", status:"sandbox-paid", at:new Date().toISOString() });
+  localStorage.setItem("pa-orders", JSON.stringify(orders));
+  document.getElementById("done").innerHTML = `Sandbox receipt ${tx}. Record saved. This did not charge a real wallet.`;
+};
+</script>
+</body>
+</html>

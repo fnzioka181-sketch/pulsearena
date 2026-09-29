@@ -1,0 +1,135 @@
+<!-- aha-build-id: bmugle72i0d6pwizu -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a Live Quiz — PulseArena</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#12202b; --accent:#e35d2a; --paper:#f6f3ee; --bad:#c43c2c; }
+* { box-sizing: border-box; }
+body { margin:0; min-height:100vh; font-family:"Source Sans 3",system-ui,sans-serif; background:var(--paper); color:var(--ink); }
+.wrap { max-width:420px; margin:0 auto; padding:48px 20px 40px; }
+h1 { font-family:Fraunces,Georgia,serif; font-size:clamp(32px,8vw,44px); margin:0 0 12px; }
+p { color:#5b6b76; }
+input { width:100%; padding:16px; border-radius:16px; border:1.5px solid #dce4ea; font-size:22px; text-align:center; letter-spacing:.12em; margin:8px 0; }
+input.name { letter-spacing:0; font-size:18px; text-align:left; }
+button { width:100%; border:0; border-radius:999px; padding:16px; font-weight:800; background:var(--accent); color:#fff; font-size:18px; margin-top:12px; }
+.err { color:var(--bad); min-height:20px; }
+.timer { width:84px;height:84px;border-radius:50%;border:6px solid var(--accent);display:grid;place-items:center;font-size:28px;font-weight:800;margin:0 auto 16px; }
+.choice { min-height:72px; border:0; border-radius:16px; color:#fff; font-weight:700; font-size:17px; padding:14px; margin:8px 0; }
+.c0{background:#e35d2a} .c1{background:#1f6f6a} .c2{background:#2c4d8a} .c3{background:#c9a227}
+.lobby { text-align:center; padding-top:48px; }
+a.home { display:block; text-align:center; margin-top:18px; color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const LS = "pulsearchena-v1";
+const load = () => JSON.parse(localStorage.getItem(LS) || "null");
+const save = (db) => localStorage.setItem(LS, JSON.stringify(db));
+let step = 1, pin = "", err = "", name = "", learnerId = sessionStorage.getItem("pa-learner") || "";
+const app = document.getElementById("app");
+
+function liveSession(db) {
+  return db && db.session && db.session.status !== "ended" ? db.session : null;
+}
+
+function paint() {
+  const db = load();
+  const s = liveSession(db);
+  const me = s && learnerId ? s.players.find(p => p.id === learnerId) : null;
+  if (me && s) {
+    if (s.phase === "lobby") {
+      app.innerHTML = `<div class="lobby"><h1>You're in!</h1><p style="font-size:28px;color:var(--ink);font-family:Fraunces,serif">${me.name}</p><p>Waiting for the trainer to start the quiz...</p></div>`;
+      return;
+    }
+    if (s.phase === "question") {
+      const qz = db.quizzes.find(x => x.id === s.quizId);
+      const n = qz.questions[s.qi];
+      const locked = me.answers?.[s.qi] != null;
+      app.innerHTML = `<div class="timer">${s.left}</div><p>Question ${s.qi+1} / ${qz.questions.length}</p><h1 style="font-size:26px">${n.text}</h1>
+        ${n.opts.map((o,i)=>`<button class="choice c${i}" data-ans="${i}" ${locked?"disabled":""}>${o}</button>`).join("")}
+        ${locked && me.lastFb ? `<h2 style="color:${me.lastFb.ok?"#1b7a4a":"#c43c2c"}">${me.lastFb.ok?"CORRECT!":"INCORRECT"}</h2>
+        <p>⚡ Answer time: ${me.lastFb.secs.toFixed(1)} seconds</p>
+        <p>🏆 Points earned: ${me.lastFb.earned}</p>
+        <p>⭐ Total score: ${me.score.toLocaleString()}</p>
+        <p>📈 Position: #${[...s.players].sort((a,b)=>b.score-a.score).findIndex(x=>x.id===me.id)+1}</p>` : `<p class="err"></p>`}`;
+
+      app.querySelectorAll("[data-ans]").forEach(b => b.onclick = () => {
+        const db2 = load(); const ss = db2.session; const p = ss.players.find(x=>x.id===learnerId);
+        if (!p || p.answers[ss.qi] != null) return;
+        const qz2 = db2.quizzes.find(x=>x.id===ss.quizId); const nn = qz2.questions[ss.qi];
+        const i = +b.dataset.ans;
+        const elapsed = Math.max(0, nn.time - ss.left);
+        const ok = i === nn.correct;
+        const earned = ok ? Math.round(nn.points * (Math.max(0, ss.left) / nn.time)) : 0;
+        p.answers[ss.qi] = { i, t: elapsed, earned, ok };
+        p.score += earned;
+        p.lastFb = { ok, secs: elapsed, earned };
+        ss.stats[i] = (ss.stats[i]||0)+1;
+        save(db2); paint();
+      });
+      return;
+    }
+    if (s.phase === "board" || s.phase === "final") {
+      const ranked = [...s.players].sort((a,b)=>b.score-a.score);
+      const pos = ranked.findIndex(x=>x.id===me.id)+1;
+      const fb = me.lastFb || { ok:false, secs:0, earned:0 };
+      app.innerHTML = `<h1>${s.phase==="final"?"🏆 FINAL RESULTS":"Leaderboard"}</h1>
+        <h2 style="color:${fb.ok?"#1b7a4a":"#c43c2c"}">${fb.ok?"CORRECT!":"INCORRECT"}</h2>
+        <p>⚡ Answer time: ${Number(fb.secs).toFixed(1)} seconds</p>
+        <p>🏆 Points earned: ${fb.earned}</p>
+        <p>⭐ Total score: ${me.score.toLocaleString()}</p>
+        <p>📈 Position: #${pos}</p>
+        ${ranked.map((p,i)=>`<p>${i+1}. ${p.name} — ${p.score.toLocaleString()} points</p>`).join("")}`;
+
+      return;
+    }
+  }
+  if (step === 1) {
+    app.innerHTML = `<h1>JOIN A LIVE QUIZ</h1><p>Enter the Game PIN displayed by your trainer.</p>
+      <input id="pin" inputmode="numeric" maxlength="6" placeholder="ENTER 6-DIGIT GAME PIN" value="${pin}">
+      <p class="err">${err}</p>
+      <button id="go">JOIN QUIZ</button>
+      <a class="home" href="../">Home</a>`;
+    document.getElementById("go").onclick = () => {
+      const db2 = load();
+      pin = document.getElementById("pin").value.trim();
+      const ended = db2 && (db2.sessions||[]).find(x => x.pin === pin && x.status === "ended");
+      const live = db2 && db2.session;
+      if (ended && (!live || live.pin !== pin)) { err = "This quiz has ended."; paint(); return; }
+      if (!live || live.pin !== pin) { err = "Invalid game PIN."; paint(); return; }
+      if (live.phase !== "lobby") { err = live.phase === "final" ? "This quiz has ended." : "This session is not accepting players."; paint(); return; }
+      if (live.players.length >= 40) { err = "Session is full."; paint(); return; }
+      err = ""; step = 2; paint();
+    };
+    return;
+  }
+  app.innerHTML = `<h1>You're almost in</h1><p>Display name for the live board.</p>
+    <input class="name" id="nm" placeholder="Your name" value="Francis">
+    <input class="name" id="rg" placeholder="Registration number (optional)">
+    <p class="err">${err}</p>
+    <button id="enter">Enter Quiz</button>`;
+  document.getElementById("enter").onclick = () => {
+    const db2 = load(); const live = db2.session;
+    name = document.getElementById("nm").value.trim();
+    const reg = document.getElementById("rg").value.trim();
+    if (!name) { err = "Enter your name."; paint(); return; }
+    if (!live || live.pin !== pin || live.phase !== "lobby") { err = "This session is not accepting players."; step = 1; paint(); return; }
+    const old = live.players.find(p => p.name.toLowerCase() === name.toLowerCase());
+    if (old) { old.online = true; learnerId = old.id; sessionStorage.setItem("pa-learner", learnerId); save(db2); paint(); return; }
+    learnerId = "p" + Date.now();
+    live.players.push({ id: learnerId, name, reg, score: 0, answers: {}, online: true });
+    sessionStorage.setItem("pa-learner", learnerId);
+    save(db2); paint();
+  };
+}
+window.addEventListener("storage", paint);
+setInterval(paint, 500);
+paint();
+</script>
+</body>
+</html>

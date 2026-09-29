@@ -1,0 +1,10 @@
+{
+  "currency": "KES",
+  "plans": [
+    {"id":"free","name":"FREE","monthly":0,"yearly":0,"participants":30,"quizzes":5,"cta":"Start Free"},
+    {"id":"starter","name":"STARTER","monthly":500,"yearly":5000,"participants":100,"quizzes":9999,"cta":"Choose Starter"},
+    {"id":"professional","name":"PROFESSIONAL","monthly":1000,"yearly":10000,"participants":300,"quizzes":9999,"cta":"Choose Professional"},
+    {"id":"institution","name":"INSTITUTION","monthly":0,"yearly":30000,"participants":1000,"quizzes":9999,"cta":"Contact Sales"}
+  ],
+  "event": {"name":"One-Time Event","price":300,"participants":100}
+}

@@ -1,0 +1,165 @@
+<!-- aha-build-id: bmugle72i0d6pwizu -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owner Admin — PulseArena</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:"Source Sans 3",system-ui;background:#f6f3ee;color:#12202b}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.side{background:#12202b;color:#fff;padding:18px}
+.side button{display:block;width:100%;text-align:left;background:transparent;color:#c9d5dc;border:0;padding:10px;border-radius:8px;cursor:pointer}
+.side button.on{background:rgba(255,255,255,.1);color:#fff}
+.main{padding:28px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.kpi{background:#fff;border:1px solid #dce4ea;border-radius:14px;padding:14px}
+.kpi b{display:block;font-size:22px;font-family:Fraunces,serif}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+.card{background:#fff;border:1px solid #dce4ea;border-radius:16px;padding:16px;margin-top:16px}
+input,select{padding:8px;border-radius:10px;border:1px solid #dce4ea}
+.btn{background:#e35d2a;color:#fff;border:0;border-radius:999px;padding:8px 14px;font-weight:700;cursor:pointer}
+.bar{height:10px;background:#ece7df;border-radius:99px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;background:#e35d2a}
+.login{max-width:380px;margin:80px auto}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="../biz.js"></script>
+<script>
+const passHash = "demo"; // trainer never sees this page without owner login
+let authed = sessionStorage.getItem("pa-owner")==="1";
+let tab = "dash";
+let profile = null;
+function kpis(m){
+  return [
+    ["TOTAL USERS", m.users.toLocaleString()],
+    ["ACTIVE TRAINERS", m.trainers],
+    ["ACTIVE SUBSCRIPTIONS", m.subs],
+    ["MONTHLY REVENUE", "KES "+m.mrev.toLocaleString()],
+    ["YEARLY REVENUE", "KES "+m.yrev.toLocaleString()],
+    ["LIVE SESSIONS", m.live],
+    ["TOTAL QUIZZES", m.quizzes.toLocaleString()],
+    ["TOTAL PARTICIPANTS", m.parts.toLocaleString()]
+  ].map(([k,v])=>`<div class="kpi"><b>${v}</b><span>${k}</span></div>`).join("");
+}
+function dash(){
+  const b=PulseBiz.load(); const m=b.metrics;
+  return `<h1>Owner dashboard</h1>
+    <div class="kpis">${kpis(m)}</div>
+    <div class="card"><h3>Answers at a glance</h3>
+      <p>Registered: ${m.users.toLocaleString()} · Active trainers: ${m.trainers} · Paying: ${m.subs} · Trials: ${m.trials} · Cancelled: ${m.cancelled}</p>
+      <p>MRR KES ${m.mrr.toLocaleString()} · ARR KES ${m.arr.toLocaleString()} · Monthly subs KES ${m.monthlyRevShare.toLocaleString()} · Annual KES ${m.yearlyRevShare.toLocaleString()} · One-time KES ${m.eventRev.toLocaleString()}</p>
+      <p>Failed payments: ${m.failed} · Live now: ${m.live}</p>
+    </div>`;
+}
+function revenue(){
+  const b=PulseBiz.load(); const m=b.metrics;
+  const max=Math.max(...Object.values(m.byPlan));
+  return `<h1>Revenue</h1>
+    <div class="kpis">
+      ${[["Today",m.today],["This week",m.week],["This month",m.month],["This year",m.year],["Lifetime",m.life],["MRR",m.mrr],["ARR",m.arr],["Refunds",m.refunds]].map(([k,v])=>`<div class="kpi"><b>KES ${v.toLocaleString()}</b><span>${k}</span></div>`).join("")}
+    </div>
+    <div class="card"><h3>Revenue by plan</h3>${Object.entries(m.byPlan).map(([k,v])=>`<div>${k}<div class="bar"><i style="width:${Math.round(100*v/max)}%"></i></div>KES ${v.toLocaleString()}</div>`).join("")}</div>
+    <div class="card"><h3>Revenue over time (seeded)</h3><div class="bar"><i style="width:40%"></i></div><div class="bar"><i style="width:55%"></i></div><div class="bar"><i style="width:70%"></i></div><div class="bar"><i style="width:88%"></i></div></div>
+    <div class="card"><h3>Plan distribution / new users / subscriptions</h3><p>Starter 38% · Professional 44% · Institution 11% · Free/trial 7%</p></div>
+    <p>Failed payments: ${m.failed}</p>`;
+}
+function users(){
+  const b=PulseBiz.load();
+  const q=(document.getElementById("uf")||{}).value||"";
+  const rows=b.trainers.filter(t=>!q || (t.name+t.email+t.plan+t.status).toLowerCase().includes(q.toLowerCase()));
+  return `<h1>Users</h1>
+    <input id="uf" placeholder="Search name, email, plan, status" value="${q||""}">
+    <table><thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Status</th><th>Quizzes</th><th>Sessions</th><th>Last Active</th></tr></thead>
+    <tbody>${rows.map(t=>`<tr data-id="${t.id}" style="cursor:pointer"><td>${t.name}</td><td>${t.role}</td><td>${t.plan}</td><td>${t.status}</td><td>${t.quizzes}</td><td>${t.sessions}</td><td>${t.last}</td></tr>`).join("")}</tbody></table>
+    ${profile?trainerCard(b.trainers.find(x=>x.id===profile)):""}`;
+}
+function trainerCard(t){
+  if(!t) return "";
+  return `<div class="card"><h2>Trainer Profile</h2>
+    <p>Name: ${t.name}<br>Plan: ${t.plan}<br>Status: ${t.status}<br>Quizzes: ${t.quizzes}<br>Live Sessions: ${t.sessions}<br>Total Participants: ${t.participants.toLocaleString()}<br>Last Active: ${t.last}<br>Monthly Usage: ${t.usage} sessions<br>Start: ${t.start} · Expiry: ${t.expiry}</p></div>`;
+}
+function live(){
+  const b=PulseBiz.load();
+  return `<h1>Live sessions</h1><p>Monitoring only — owners cannot interrupt a room from here.</p>
+    ${b.live.map(s=>`<div class="card"><strong>${s.trainer}</strong><p>Quiz: ${s.quiz}<br>Game PIN: ${s.pin}<br>Players: ${s.players}<br>Question: ${s.q}<br>Status: ${s.status} · Plan: ${s.plan}</p></div>`).join("")}`;
+}
+function pricing(){
+  const b=PulseBiz.load();
+  return `<h1>Pricing management</h1>
+    ${b.plans.map(p=>`<div class="card"><strong>${p.name}</strong>
+      <p>Monthly <input data-f="monthly" data-id="${p.id}" type="number" value="${p.monthly}">
+      Annual <input data-f="yearly" data-id="${p.id}" type="number" value="${p.yearly}">
+      Participants <input data-f="participants" data-id="${p.id}" type="number" value="${p.participants}">
+      Quizzes <input data-f="quizzes" data-id="${p.id}" type="number" value="${p.quizzes}"></p>
+      <button class="btn" data-save="${p.id}">Save</button></div>`).join("")}
+    <div class="card">One-time event KES <input id="evp" type="number" value="${b.eventPrice}"> <button class="btn" id="saveev">Save</button></div>
+    <div class="card">Trial <label><input type="checkbox" id="ton" ${b.trialOn?"checked":""}> 14-day Professional Trial</label> Days <input id="td" type="number" value="${b.trialDays}"> <button class="btn" id="savet">Save trial</button></div>
+    <h3>Pricing history</h3>${(b.history||[]).concat(b.audit).map(a=>`<p>${a.admin||"Super Admin"}: ${a.action||"price change"} · ${a.prev||""} → ${a.next||""} · ${a.date}</p>`).join("")}`;
+}
+function coupons(){
+  const b=PulseBiz.load();
+  return `<h1>Coupons</h1>
+    ${b.coupons.map(c=>`<div class="card"><code>${c.code}</code> ${c.pct}% · ${c.months} months · ${c.plans}<br>Uses ${c.uses} · Remaining ${c.remain} · Revenue KES ${c.revenue.toLocaleString()} · Exp ${c.exp}</div>`).join("")}
+    <div class="card"><input id="nc" placeholder="NEWCODE"> <button class="btn" id="addc">Create</button></div>`;
+}
+function audit(){
+  const b=PulseBiz.load();
+  const q=(document.getElementById("af")||{}).value||"";
+  const rows=b.audit.filter(a=>!q || JSON.stringify(a).toLowerCase().includes(q.toLowerCase()));
+  return `<h1>Audit log</h1><input id="af" value="${q||""}" placeholder="Search">
+    ${rows.map(a=>`<div class="card">Admin: ${a.admin}<br>Action: ${a.action}<br>Previous: ${a.prev}<br>New: ${a.next}<br>Date: ${a.date}</div>`).join("")}`;
+}
+function payments(){
+  const b=PulseBiz.load();
+  return `<h1>Payments</h1><table><thead><tr><th>ID</th><th>Amount</th><th>Plan</th><th>Method</th><th>Status</th><th>Date</th></tr></thead>
+  <tbody>${b.tx.map(t=>`<tr><td>${t.id}</td><td>${t.currency} ${t.amount}</td><td>${t.plan}</td><td>${t.method}</td><td>${t.status}</td><td>${t.date.slice(0,10)}</td></tr>`).join("")}</tbody></table>
+  <p>Abstraction layer: Mobile / Card / Gateway — M-Pesa-compatible provider can be plugged in. No card PAN stored.</p>`;
+}
+function render(){
+  if(!authed){
+    document.getElementById("app").innerHTML=`<div class="login card"><h1>Owner sign in</h1><p>Trainers cannot enter this desk.</p>
+      <input id="em" value="kai@pulsearchena.app"><input id="pw" type="password" value="owner123" style="margin-top:8px">
+      <p id="le" style="color:#c43c2c"></p><button class="btn" id="go">Enter admin</button><p><a href="../">Home</a></p></div>`;
+    document.getElementById("go").onclick=()=>{
+      if(document.getElementById("em").value!=="kai@pulsearchena.app" || document.getElementById("pw").value!=="owner123"){
+        document.getElementById("le").textContent="Incorrect credentials."; return;
+      }
+      authed=true; sessionStorage.setItem("pa-owner","1"); render();
+    };
+    return;
+  }
+  const nav=[["dash","Overview"],["revenue","Revenue"],["users","Users"],["live","Live sessions"],["pricing","Pricing"],["coupons","Coupons"],["payments","Payments"],["audit","Audit"]];
+  const body={dash,revenue,users,live,pricing,coupons,payments,audit}[tab]();
+  document.getElementById("app").innerHTML=`<div class="shell"><aside class="side"><strong>PulseArena Owner</strong>
+    ${nav.map(([id,l])=>`<button class="${tab===id?"on":""}" data-t="${id}">${l}</button>`).join("")}
+    <button id="out">Sign out</button><p><a href="../" style="color:#fff">Home</a></p></aside>
+    <main class="main">${body}</main></div>`;
+  document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;profile=null;render();});
+  document.getElementById("out").onclick=()=>{authed=false;sessionStorage.removeItem("pa-owner");render();};
+  const uf=document.getElementById("uf"); if(uf) uf.onchange=render;
+  const af=document.getElementById("af"); if(af) af.onchange=render;
+  document.querySelectorAll("tr[data-id]").forEach(r=>r.onclick=()=>{profile=r.dataset.id;render();});
+  document.querySelectorAll("[data-save]").forEach(btn=>btn.onclick=()=>{
+    const b=PulseBiz.load(); const p=b.plans.find(x=>x.id===btn.dataset.save);
+    const prev=p.monthly;
+    document.querySelectorAll(`input[data-id="${p.id}"]`).forEach(i=>p[i.dataset.f]=+i.value);
+    b.audit.unshift({admin:"Super Admin",action:`Changed ${p.name} plan price`,prev:"KES "+prev,next:"KES "+p.monthly,date:"24 September 2026"});
+    b.history.unshift({admin:"Super Admin",action:"price",prev:"KES "+prev,next:"KES "+p.monthly,date:new Date().toISOString()});
+    PulseBiz.save(b); render();
+  });
+  const se=document.getElementById("saveev");
+  if(se) se.onclick=()=>{const b=PulseBiz.load(); b.eventPrice=+document.getElementById("evp").value; PulseBiz.save(b); render();};
+  const st=document.getElementById("savet");
+  if(st) st.onclick=()=>{const b=PulseBiz.load(); b.trialOn=document.getElementById("ton").checked; b.trialDays=+document.getElementById("td").value; PulseBiz.save(b); render();};
+  const ac=document.getElementById("addc");
+  if(ac) ac.onclick=()=>{const b=PulseBiz.load(); b.coupons.push({code:document.getElementById("nc").value||"WELCOME50",pct:50,months:3,plans:"starter,professional",exp:"2026-12-31",uses:0,remain:200,revenue:0}); PulseBiz.save(b); render();};
+}
+render();
+</script>
+</body>
+</html>
